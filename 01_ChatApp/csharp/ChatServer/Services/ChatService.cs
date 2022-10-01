@@ -39,7 +39,7 @@ public class ChatService : Chat.ChatBase
             while (await requestStream.MoveNext(_cts.Token))
             {
                 var message = requestStream.Current;
-                Log($"OnRequestEvent - ClientId: {clientId}, Message: {message}");
+                Log($"OnRequestEvent - ThreadId: {Environment.CurrentManagedThreadId}, ClientId: {clientId}, Message: {message}");
 
                 var chatGroup = _chatGroupRepository.GetOrAdd(message.GroupName);
                 if (!chatGroup.Contains(clientId))
