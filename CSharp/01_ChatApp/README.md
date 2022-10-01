@@ -12,3 +12,8 @@ Client
 > cd ChatClient
 > dotnet run
 ```
+
+Release build
+```
+> dotnet build --configuration Release
+```
