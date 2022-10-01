@@ -14,9 +14,9 @@ public class ChatService : Chat.ChatBase
     private readonly ChatGroupRepository _chatGroupRepository;
     private readonly ILogger<ChatService> _logger;
 
-    public ChatService(ChatGroupRepository chatGroup, ILogger<ChatService> logger)
+    public ChatService(ChatGroupRepository chatGroupRepository, ILogger<ChatService> logger)
     {
-        _chatGroupRepository = chatGroup;
+        _chatGroupRepository = chatGroupRepository;
         _logger = logger;
     }
 
