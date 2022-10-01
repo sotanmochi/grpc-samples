@@ -1,12 +1,15 @@
+#if ENABLE_MONO || ENABLE_IL2CPP
+#define UNITY_ENGINE
+#endif
+
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
-using Grpc.Net.Client;
 using ChatApp.Shared;
 
-namespace ChatApp.Client;
-
+namespace ChatApp.Client
+{
 public class ChatStreamingClient
 {
     public Action<ChatMessage> OnResponseEvent;
@@ -15,7 +18,7 @@ public class ChatStreamingClient
     private readonly Chat.ChatClient _chatClient;
     private AsyncDuplexStreamingCall<ChatMessage, ChatMessage> _streamingCall;
 
-    public ChatStreamingClient(GrpcChannel channel)
+    public ChatStreamingClient(ChannelBase channel)
     {
         _chatClient = new Chat.ChatClient(channel);
     }
@@ -92,6 +95,11 @@ public class ChatStreamingClient
 
     private void Log(object message)
     {
+#if UNITY_ENGINE
+        UnityEngine.Debug.Log($"[StreamingClient] {message}");
+#else
         Console.WriteLine($"[StreamingClient] {message}");
+#endif
     }
+}
 }
