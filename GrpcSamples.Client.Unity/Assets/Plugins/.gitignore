@@ -1,0 +1,5 @@
+grpc_unity_package.2.47.0/Grpc.Core/runtimes/android/arm64-v8a/libgrpc_csharp_ext.so
+grpc_unity_package.2.47.0/Grpc.Core/runtimes/android/armeabi-v7a/libgrpc_csharp_ext.so
+grpc_unity_package.2.47.0/Grpc.Core/runtimes/android/x86/libgrpc_csharp_ext.so
+grpc_unity_package.2.47.0/Grpc.Core/runtimes/ios/libgrpc.a
+grpc_unity_package.2.47.0/Grpc.Core/runtimes/ios/libgrpc_csharp_ext.a
