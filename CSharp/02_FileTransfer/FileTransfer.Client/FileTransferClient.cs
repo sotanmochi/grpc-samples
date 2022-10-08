@@ -5,7 +5,12 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+#if !UNITY_ENGINE
 using System.Text.Json;
+#else
+using Newtonsoft.Json;
+using System.Threading;
+#endif
 using System.Threading.Tasks;
 using Google.Protobuf;
 using Grpc.Core;
@@ -42,31 +47,46 @@ public class FileTransferClient
             {
                 FileId = fileId,
             });
-            
+
+#if !UNITY_ENGINE
             await using var fileStream = File.Create(binaryFilePath);
-            
-            await foreach (var message in streamingCall.ResponseStream.ReadAllAsync())
+            await foreach (var response in streamingCall.ResponseStream.ReadAllAsync())
             {
-                if (message.HasError && !string.IsNullOrEmpty(message.ResponseMessage))
+#else
+            using var fileStream = File.Create(binaryFilePath);
+            while (await streamingCall.ResponseStream.MoveNext(CancellationToken.None))
+            {
+                var response = streamingCall.ResponseStream.Current;
+#endif
+                if (response.HasError && !string.IsNullOrEmpty(response.ResponseMessage))
                 {
-                    throw new FileTransferRequestException($"'{message.ResponseMessage}' occurred on the server while downloading the file '{fileId}'.");
+                    throw new FileTransferRequestException($"'{response.ResponseMessage}' occurred on the server while downloading the file '{fileId}'.");
                 }
                 
-                if (message.Metadata != null)
+                if (response.Metadata != null)
                 {
-                    fileName = message.Metadata.FileName;
-                    compression = message.Metadata.Compression;
+                    fileName = response.Metadata.FileName;
+                    compression = response.Metadata.Compression;
                     
                     Log("Saving metadata to temporary file.");
-                    var jsonString = JsonSerializer.Serialize(message.Metadata);
+#if !UNITY_ENGINE
+                    var jsonString = JsonSerializer.Serialize(response.Metadata);
                     await File.WriteAllTextAsync(Path.Combine(tempDirectory, "metadata.json"), jsonString);
+#else
+                    var jsonString = JsonConvert.SerializeObject(response.Metadata);
+                    File.WriteAllText(Path.Combine(tempDirectory, "metadata.json"), jsonString);
+#endif
                 }
                 
-                if (message.Data != null)
+                if (response.Data != null)
                 {
-                    var bytes = message.Data.Memory;
+                    var bytes = response.Data.Memory;
                     Log($"Saving {bytes.Length} bytes to temporary file.");
+#if !UNITY_ENGINE
                     await fileStream.WriteAsync(bytes);
+#else
+                    await fileStream.WriteAsync(bytes.ToArray(), 0, bytes.Length, CancellationToken.None);
+#endif
                 }
             }
             
@@ -76,15 +96,24 @@ public class FileTransferClient
             {
                 Log($"Saving decompressed file.");
                 fileStream.Position = 0;
+#if !UNITY_ENGINE
                 await using var decompressedFileStream = File.Create(saveFilePath);
                 await using var decompressor = new DeflateStream(fileStream, CompressionMode.Decompress);
+#else
+                using var decompressedFileStream = File.Create(saveFilePath);
+                using var decompressor = new DeflateStream(fileStream, CompressionMode.Decompress);
+#endif
                 await decompressor.CopyToAsync(decompressedFileStream);
             }
             else
             {
                 fileStream.Close();
                 Log($"Saving file.");
+#if !UNITY_ENGINE
                 File.Move(binaryFilePath, saveFilePath, true);
+#else
+                File.Move(binaryFilePath, saveFilePath);
+#endif
             }
             
             downloadedFileInfo = new FileInfo(saveFilePath);
@@ -109,9 +138,10 @@ public class FileTransferClient
         var tempDirectory = Path.Combine(Path.GetDirectoryName(uploadFilePath), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDirectory);
         
+        var streamingCall = _fileTransferClient.UploadFile();
+
         try
         {
-            var streamingCall = _fileTransferClient.UploadFile();
             
             var metadata = new MetaData()
             {
@@ -126,19 +156,33 @@ public class FileTransferClient
             {
                 var compressedFilePath = Path.Combine(tempDirectory, "compressed.bin");
                 
+#if !UNITY_ENGINE
                 await using var sourceFileStream = File.OpenRead(uploadFilePath);
                 await using var compressedFileStream = File.Create(compressedFilePath);
                 await using var compressor = new DeflateStream(compressedFileStream, CompressionMode.Compress);
+#else
+                using var sourceFileStream = File.OpenRead(uploadFilePath);
+                using var compressedFileStream = File.Create(compressedFilePath);
+                using var compressor = new DeflateStream(compressedFileStream, CompressionMode.Compress);
+#endif
                 await sourceFileStream.CopyToAsync(compressor);
                 
                 uploadFilePath = Path.Combine(compressedFilePath);
             }
             
+#if !UNITY_ENGINE
             await using (var readStream = File.OpenRead(uploadFilePath))
+#else
+            using (var readStream = File.OpenRead(uploadFilePath))
+#endif
             {
                 while (true)
                 {
+#if !UNITY_ENGINE
                     var count = await readStream.ReadAsync(_buffer);
+#else
+                    var count = await readStream.ReadAsync(_buffer, 0, _buffer.Length);
+#endif
                     if (count == 0)
                     {
                         break;
@@ -167,6 +211,8 @@ public class FileTransferClient
         catch (Exception exception)
         {
             fileId = null;
+            await streamingCall.RequestStream.CompleteAsync();
+            Log("Complete request.");
             LogError($"{exception}\n");
         }
         finally

@@ -64,6 +64,8 @@ public class FileTransferService : FileTransfer.FileTransferBase
                     Data = UnsafeByteOperations.UnsafeWrap(_buffer.AsMemory(0, numBytesRead))
                 });
             }
+            
+            _logger.LogInformation($"Completed.");
         }
         catch (Exception exception)
         {
