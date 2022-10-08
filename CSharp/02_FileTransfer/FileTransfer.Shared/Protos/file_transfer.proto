@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+option csharp_namespace = "FileTransferApp.Shared";
+
+package file_transfer;
+
+service FileTransfer {
+  rpc DownloadFile (DownloadRequest) returns (stream DownloadResponse);
+  rpc UploadFile (stream UploadRequest) returns (UploadResponse);
+}
+
+message MetaData {
+  string file_name = 1;
+  bool compression = 2;
+}
+
+message DownloadRequest {
+  string file_id = 1;
+}
+
+message DownloadResponse {
+  bool has_error = 1;
+  string response_message = 2;
+  MetaData metadata = 3;
+  bytes data = 4;
+}
+
+message UploadRequest {
+  MetaData metadata = 1;
+  bytes data = 2;
+}
+
+message UploadResponse {
+  bool has_error = 1;
+  string response_message = 2;
+  string file_id = 3;
+}
