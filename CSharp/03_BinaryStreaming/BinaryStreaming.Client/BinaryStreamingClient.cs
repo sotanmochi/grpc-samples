@@ -21,7 +21,7 @@ public class BinaryStreamingClient
     private readonly CallInvoker _callInvoker;
     
     private AsyncDuplexStreamingCall<byte[], byte[]> _streamingCall;
-
+    
     public BinaryStreamingClient(ChannelBase channel, string host = null, CallOptions options = default(CallOptions))
     {
         _host = host;
@@ -37,7 +37,7 @@ public class BinaryStreamingClient
         {
             if (_streamingCall != null)
             {
-                await _streamingCall.RequestStream.CompleteAsync();
+                await _streamingCall.RequestStream.CompleteAsync().ConfigureAwait(false);
                 Log("RequestStream.CompleteAsync");
             }
         }
@@ -55,16 +55,19 @@ public class BinaryStreamingClient
     {
         try
         {
-            await Connect().ConfigureAwait(false);
+            await ConnectAsync().ConfigureAwait(false);
         }
         catch (Exception e)
         {
-            Log($"An error occurred while connecting to the server.\n {e}");
+             const string message = "An error occurred while connecting to the server.";
+            LogError($"{message}\n{e}");
         }
     }
 
-    public async Task Connect()
+    public async Task ConnectAsync()
     {
+        var syncContext = SynchronizationContext.Current; // Capture SynchronizationContext.
+        
         try
         {
             using (_streamingCall = _callInvoker.AsyncDuplexStreamingCall<byte[], byte[]>(BinaryStreamingGrpc.ConnectMethod, _host, _options))
@@ -72,25 +75,46 @@ public class BinaryStreamingClient
                 var streamReader = _streamingCall.ResponseStream;
                 while (await streamReader.MoveNext(_cts.Token).ConfigureAwait(false))
                 {
-                    OnResponseEvent?.Invoke(streamReader.Current);
+                    try
+                    {
+                        ConsumeData(syncContext, streamReader.Current);
+                    }
+                    catch (Exception e)
+                    {
+                        const string message = "An error occurred when consuming a received message, but the subscription is still alive.";
+                        LogError($"{message}\n{e}");
+                    }
                 }
             }
         }
-        catch (RpcException)
+        catch (Exception e)
         {
             _streamingCall = null;
-            throw;
+            const string message = "An error occurred while subscribing to messages.";
+            LogError($"{message}\n{e}");
         }
         finally
         {
             Log("OnDisconnected");
-            await DisposeAsync();
+            await DisposeAsync().ConfigureAwait(false);
         }
     }
 
     public async Task SendAsync(byte[] data)
     {
         await _streamingCall.RequestStream.WriteAsync(data);
+    }
+
+    private void ConsumeData(SynchronizationContext syncContext, byte[] data)
+    {
+        if (syncContext != null)
+        {
+            syncContext.Post(_ => OnResponseEvent?.Invoke(data), null);
+        }
+        else
+        {
+            OnResponseEvent?.Invoke(data);
+        }
     }
 
     [
@@ -103,6 +127,15 @@ public class BinaryStreamingClient
         UnityEngine.Debug.Log($"[BinaryStreamingClient] {message}");
 #else
         Console.WriteLine($"[BinaryStreamingClient] {message}");
+#endif
+    }
+
+    private void LogError(object message)
+    {
+#if UNITY_ENGINE
+        UnityEngine.Debug.LogError($"[BinaryStreamingClient] {message}");
+#else
+        Console.WriteLine($"[ERROR][BinaryStreamingClient] {message}");
 #endif
     }
 }
