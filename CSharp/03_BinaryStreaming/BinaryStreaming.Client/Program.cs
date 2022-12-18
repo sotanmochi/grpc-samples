@@ -14,8 +14,8 @@ public class Program
         Console.WriteLine($"///////////////////////////////////////////");
         
         // The port number must match the port of the gRPC server.
-        using var channel = GrpcChannel.ForAddress("http://localhost:5247");
-        // using var channel = GrpcChannel.ForAddress("https://localhost:7179");
+        using var channel = GrpcChannel.ForAddress("http://localhost:50051");
+        // using var channel = GrpcChannel.ForAddress("https://localhost:50052");
         
         Console.WriteLine($"-------------------------------------------");
         
