@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -33,7 +34,7 @@ class BinaryStreamingClient
             Dispose();
         }
 
-        void AddEventHandler(std::shared_ptr<std::function<void(ByteBuffer &data)>> eventHandler)
+        void AddEventHandler(std::shared_ptr<std::function<void(const uint8_t* buffer, const size_t length)>> eventHandler)
         {
             auto it = std::find(eventHandlers_.begin(), eventHandlers_.end(), eventHandler);
             if (it == eventHandlers_.end())
@@ -46,10 +47,10 @@ class BinaryStreamingClient
             }
         }
 
-        void RemoveEventHandler(std::shared_ptr<std::function<void(ByteBuffer &data)>> eventHandler)
+        void RemoveEventHandler(std::shared_ptr<std::function<void(const uint8_t* buffer, const size_t length)>> eventHandler)
         {
             auto end = std::remove_if(eventHandlers_.begin(), eventHandlers_.end(), 
-                                        [eventHandler](std::shared_ptr<std::function<void(ByteBuffer &data)>> func) -> bool 
+                                        [eventHandler](std::shared_ptr<std::function<void(const uint8_t* buffer, const size_t length)>> func) -> bool 
                                         {
                                             return (func == eventHandler);
                                         });
@@ -91,14 +92,15 @@ class BinaryStreamingClient
                     if (!response.DumpToSingleSlice(&slice).ok())
                     {
                         std::cout << "[BinaryStreaming] No payload" << std::endl;
+                        continue;
                     }
                 }
 
-                std::cout << "[BinaryStreaming] Received data size: " << slice.size() << std::endl;
+                // std::cout << "[BinaryStreaming] Received data size: " << slice.size() << std::endl;
 
                 for (auto& func: eventHandlers_)
                 {
-                    (*func)(response);
+                    (*func)(slice.begin(), slice.size());
                 }
             }
 
@@ -115,11 +117,11 @@ class BinaryStreamingClient
 #endif
         }
 
-        void Send()
+        void Send(const uint8_t* buffer, const size_t length)
         {
-            std::cout << "[BinaryStreamingClient] Send binary data (Work In Progress)." << std::endl;
-            // ByteBuffer request;
-            // stream_->Write(request);
+            Slice slice(buffer, length);
+            ByteBuffer request(&slice, 1);
+            stream_->Write(request);
         }
 
         void Dispose()
@@ -147,6 +149,6 @@ class BinaryStreamingClient
         ClientContext context_;
         std::unique_ptr<BinaryStreaming::Stub> stub_;
         std::unique_ptr<ClientReaderWriter<ByteBuffer, ByteBuffer>> stream_;
-        std::list<std::shared_ptr<std::function<void(ByteBuffer &data)>>> eventHandlers_;
+        std::list<std::shared_ptr<std::function<void(const uint8_t* buffer, const size_t length)>>> eventHandlers_;
 };
 }

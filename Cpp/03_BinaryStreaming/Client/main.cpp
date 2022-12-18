@@ -1,13 +1,19 @@
 #define DEVELOPMENT_BUILD
 
 #include <csignal>
+#include <chrono>
 #include <iostream>
 #include <string>
 
 #include <grpcpp/grpcpp.h>
 #include "BinaryStreamingClient.h"
+#include "StreamingMessage.h"
 
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
+using std::chrono::system_clock;
 using BinaryStreamingApp::Client::BinaryStreamingClient;
+using BinaryStreamingApp::Client::StreamingMessage;
 
 class Startup
 {
@@ -28,10 +34,13 @@ class Startup
         {
             client = new BinaryStreamingClient(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
 
-            auto eventHandler = std::make_shared<std::function<void(ByteBuffer &data)>>([&](ByteBuffer data){ this->OnReceivedMessageEventHandler(data); });
+            auto eventHandler = std::make_shared<std::function<void(const uint8_t* buffer, const size_t length)>>([&](const uint8_t* buffer, const size_t length){ this->OnReceivedMessageEventHandler(buffer, length); });
             client->AddEventHandler(eventHandler);
 
             client->ConnectAndForget();
+
+            msgpack::sbuffer buffer;
+            StreamingMessage streamingMessage;
 
             while (true)
             {
@@ -42,8 +51,15 @@ class Startup
                 if (message == "q" || std::cin.eof()) break;
                 if (message.empty()) continue;
 
-                client->Send();
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                auto timestampMilliseconds = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+
+                streamingMessage.set_timestamp(timestampMilliseconds);
+                streamingMessage.set_textmessage(message);
+                msgpack::pack(buffer, streamingMessage);
+
+                client->Send((uint8_t*)buffer.data(), buffer.size());
+
+                buffer.clear();
             }
 
             client->RemoveEventHandler(eventHandler);
@@ -61,11 +77,24 @@ class Startup
 #endif
         }
 
-        void OnReceivedMessageEventHandler(ByteBuffer data)
+        void OnReceivedMessageEventHandler(const uint8_t* buffer, size_t length)
         {
+            msgpack::object_handle handle = msgpack::unpack((char*)buffer, length);
+            msgpack::object obj(handle.get());
+
+            StreamingMessage streamingMessage = obj.as<StreamingMessage>();
+
+            time_t timestamp = streamingMessage.timestamp();
+
             std::cout << std::endl;
             std::cout << "-------------------------------------------" << std::endl;
-            std::cout << "[EventHandler] Received data size: " << data.Length() << std::endl;
+            std::cout << "Received data size: " << length << std::endl;
+            std::cout << "-------------------------------------------" << std::endl;
+            std::cout << "Received message: " << std::endl;
+            std::cout << "{" << std::endl;
+            std::cout << "  Timestamp (Milliseconds): " << streamingMessage.timestamp() << std::endl;
+            std::cout << "  TextMessage: " << streamingMessage.textmessage() << std::endl;
+            std::cout << "}" << std::endl;
             std::cout << "-------------------------------------------" << std::endl;
             std::cout << "Input message ('q' to quit) > ";
         }

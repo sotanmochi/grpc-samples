@@ -2,7 +2,7 @@ using System;
 using System.Text;
 using System.Threading.Tasks;
 using Grpc.Net.Client;
-using BinaryStreaming.Shared;
+using MessagePack;
 
 namespace BinaryStreaming.Client;
 
@@ -30,6 +30,8 @@ public class Startup
 
     public async Task StartAsync()
     {
+        var streamingMessage = new StreamingMessage();
+
         _client.ConnectAndForget();
         
         while (true)
@@ -46,11 +48,14 @@ public class Startup
                 continue;
             }
 
-            var data = System.Text.Encoding.UTF8.GetBytes(message);
+            streamingMessage.TimestampMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            streamingMessage.TextMessage = message;
 
-            Console.WriteLine($"-------------------------------------------");
-            Console.WriteLine($"SendAsync: {data.Length} [bytes]");
-            Console.WriteLine($"-------------------------------------------");
+            var data = MessagePackSerializer.Serialize(streamingMessage);
+
+            // Console.WriteLine($"-------------------------------------------");
+            // Console.WriteLine($"SendAsync: {data.Length} [bytes]");
+            // Console.WriteLine($"-------------------------------------------");
 
             await _client.SendAsync(data);
         }
@@ -58,10 +63,22 @@ public class Startup
 
     private void OnResponseEventHandler(byte[] data)
     {
-        var message = System.Text.Encoding.UTF8.GetString(data);
+        var streamingMessage = MessagePackSerializer.Deserialize<StreamingMessage>(data);
+
+        var message = streamingMessage.TextMessage;
+        var TimestampMilliseconds = streamingMessage.TimestampMilliseconds;
+
+        var localTime = DateTimeOffset.FromUnixTimeMilliseconds(streamingMessage.TimestampMilliseconds).ToLocalTime();
+
         Console.WriteLine("");
         Console.WriteLine($"-------------------------------------------");
-        Console.WriteLine($"Received message: {message}");
+        Console.WriteLine($"Received data size: {data.Length}");
+        Console.WriteLine($"-------------------------------------------");
+        Console.WriteLine($"Received message: ");
+        Console.WriteLine("{");
+        Console.WriteLine($"  Timestamp (Milliseconds): {TimestampMilliseconds} ({localTime})");
+        Console.WriteLine($"  TextMessage: {message}");
+        Console.WriteLine("}");
         Console.WriteLine($"-------------------------------------------");
         Console.Write($"Input message ('q' to quit): {_inputMessageBuffer}");
     }

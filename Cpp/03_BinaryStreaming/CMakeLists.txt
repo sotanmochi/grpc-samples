@@ -23,8 +23,10 @@ target_link_libraries(grpc_proto
   ${_PROTOBUF_LIBPROTOBUF})
 
 # client
+find_package(msgpack REQUIRED)
 add_executable(client "./Client/main.cpp")
 target_link_libraries(client
+  msgpackc-cxx
   grpc_proto
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
